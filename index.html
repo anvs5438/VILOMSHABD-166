@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Quiz (Syam Prasad) — Samas (Custom selectors + Timer toggle)</title>
+<link href="https://fonts.googleapis.com/css?family=Orbitron:700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg1:#291c6e;
+  --bg2:#00167d;
+  --panel:#12132a;
+  --accent:#2debb0;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  min-height:100vh;
+  display:flex;
+  justify-content:center;
+  background: radial-gradient(circle at 10% 10%, #06104a 0%, var(--bg1) 25%, var(--bg2) 70%);
+  font-family: "Orbitron", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  color:#dfe;
+  padding:28px 12px;
+}
+.container{
+  width:720px;
+  max-width:96%;
+  border-radius:18px;
+  overflow:hidden;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.25) 100%);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.03);
+}
+.header{
+  background: linear-gradient(90deg,#9b36ff 20%, #53f0d6 100%);
+  padding:22px 18px;
+  text-align:center;
+  color:#fff;
+  font-size:28px;
+  font-weight:700;
+  letter-spacing:1px;
+}
+.controls{
+  display:flex;
+  gap:12px;
+  justify-content:center;
+  align-items:center;
+  padding:14px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.12), rgba(0,0,0,0.06));
+  flex-wrap:wrap;
+}
+.control-item{ display:flex; align-items:center; gap:8px; }
+.select, .small-btn, .num-input{
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: #dff;
+  padding:8px 10px;
+  border-radius:8px;
+  font-weight:700;
+}
+.small-btn{
+  background: linear-gradient(90deg,#4ef1c7,#3abf8b);
+  border:none;
+  cursor:pointer;
+  padding:9px 14px;
+}
+.num-input{ width:84px; padding:8px; color:#000; background:#fff; border-radius:8px; font-weight:700; }
+
+/* panel & layout */
+.panel{
+  padding:18px;
+  position:relative;
+  /* use the panel CSS variable */
+  background: linear-gradient(180deg, rgba(5,8,30,0.6), var(--panel));
+}
+.top-row{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.qbox{
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border-radius:14px; padding:18px; margin-top:12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  /* use accent var for border-left */
+  border-left:6px solid var(--accent, rgba(45,235,176,0.12));
+}
+.question { font-size:20px; color:#e6fff7; margin-bottom:14px; }
+
+/* big rounded answer buttons */
+.options { display:flex; flex-direction:column; gap:14px; }
+.answer-btn{
+  display:flex; align-items:center; justify-content:center;
+  padding:18px 22px; border-radius:40px;
+  background: linear-gradient(90deg,#2f00c8,#4b2bff);
+  color:#fff; font-size:18px; font-weight:800;
+  border: 2px solid rgba(255,255,255,0.06);
+  cursor:pointer; transition: transform 140ms, box-shadow 160ms, background 160ms;
+  box-shadow: 0 6px 24px rgba(30,20,60,0.35); user-select:none;
+}
+.answer-btn:hover{ transform: translateY(-4px); }
+.answer-btn:active{ transform: translateY(-1px); }
+.answer-btn[disabled]{ opacity:0.95; cursor:default; transform:none; }
+
+/* deep color flashes */
+@keyframes flashCorrect { 0%{transform:scale(1)} 40%{transform:scale(1.02)} 100%{transform:none} }
+@keyframes flashWrong { 0%{transform:scale(1)} 40%{transform:scale(1.02)} 100%{transform:none} }
+.answer-btn.correct { background: #FFD700; border-color:#FFD700; color:#000; animation: flashCorrect 420ms ease; box-shadow:0 8px 28px rgba(255,215,0,0.16); }
+.answer-btn.incorrect { background: #B22222; border-color:#8B0000; color:#fff; animation: flashWrong 420ms ease; box-shadow:0 8px 28px rgba(178,34,34,0.12); }
+
+/* progress + counter */
+.progress-bar{ height:8px; background: rgba(255,255,255,0.03); border-radius:8px; margin:18px 0; overflow:hidden; }
+.progress{ height:100%; width:0%; background: linear-gradient(90deg,#3a1bff,#5ec0ff); transition:width 200ms; }
+.counter{ text-align:center; color: #9fffe7; font-weight:700; padding:6px; margin-top:6px; }
+
+.footer{ padding:20px; height:56px; }
+
+/* responsive */
+@media (max-width:560px){
+  .answer-btn{ font-size:16px; padding:14px; border-radius:28px; }
+  .header{ font-size:20px; padding:16px; }
+  .num-input{ width:64px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">QUIZ (SYAM PRASAD)</div>
+
+  <div class="controls">
+    <div class="control-item">
+      <label style="font-weight:700">Choices:</label>
+      <select id="choiceSelect" class="select"></select>
+      <input id="choiceCustom" class="num-input" type="number" placeholder="Custom" style="display:none;" min="1" />
+    </div>
+
+    <div class="control-item">
+      <label style="font-weight:700">Questions:</label>
+      <select id="countSelect" class="select"></select>
+      <input id="countCustom" class="num-input" type="number" placeholder="Custom" style="display:none;" min="1" />
+    </div>
+
+    <div class="control-item">
+      <label style="font-weight:700">Time (s):</label>
+      <select id="timeSelect" class="select"></select>
+      <input id="timeCustom" class="num-input" type="number" placeholder="Seconds" style="display:none;" min="0" />
+    </div>
+
+    <div class="control-item">
+      <label style="font-weight:700">
+        <input id="timerEnable" type="checkbox" style="transform:scale(1.2); margin-right:8px;" />
+        Enable Timer
+      </label>
+    </div>
+
+    <!-- Theme dropdown -->
+    <div class="control-item">
+      <label style="font-weight:700">Theme:</label>
+      <select id="themeSelect" class="select"></select>
+    </div>
+
+    <div class="control-item">
+      <button id="startBtn" class="small-btn">Start / Restart</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="top-row">
+      <div style="width:72%">
+        <div class="qbox">
+          <div id="quiz"><!-- injected --></div>
+        </div>
+      </div>
+      <div style="width:26%; padding-left:12px; text-align:right;">
+        <div style="color:#9fffe7; font-weight:700; margin-top:8px;">Time Left: <span id="timer">--:--</span></div>
+        <div style="height:8px"></div>
+        <div class="progress-bar"><div id="progress" class="progress"></div></div>
+        <div class="counter" id="counter">Question 0 of 0</div>
+      </div>
+    </div>
+
+    <div class="footer"></div>
+  </div>
+</div>
+
+<script>
+/* ------------------------
+   Questions dataset
+   ------------------------ */
+const questions = [
+  {"question":"अपराधी","options":["निरपराधी","मानना","पतला","गुरु"],"answer":"निरपराधी"},
+  {"question":"सत्य","options":["असत्य","नया","ऊपर","मीठा"],"answer":"असत्य"},
+  {"question":"सच","options":["झूठ","खुला","दूर","तेज़"],"answer":"झूठ"},
+  {"question":"दिन","options":["रात","भरा","ताज़ा","ऊँचा"],"answer":"रात"},
+  {"question":"गरम","options":["ठंडा","सुंदर","भीतर","सस्ता"],"answer":"ठंडा"},
+  {"question":"बड़ा","options":["छोटा","सजाना","ज़िन्दा","धीमा"],"answer":"छोटा"},
+  {"question":"ऊपर","options":["नीचे","खुश","गहरा","स्वतंत्र"],"answer":"नीचे"},
+  {"question":"अंदर","options":["बाहर","अमीर","साफ","शांत"],"answer":"बाहर"},
+  {"question":"सफेद","options":["काला","तेज़","खुला","मोटा"],"answer":"काला"},
+  {"question":"अमीर","options":["गरीब","लंबा","बलवान","जल्दी"],"answer":"गरीब"},
+  {"question":"नया","options":["पुराना","सत्य","हल्का","ऊँचा"],"answer":"पुराना"},
+  {"question":"तेज़","options":["धीमा","खुश","भरा","सस्ता"],"answer":"धीमा"},
+  {"question":"आनंद","options":["दुःख","साफ","बायाँ","निरन्तर"],"answer":"दुःख"},
+  {"question":"मित्र","options":["शत्रु","सस्ता","नया","ताज़ा"],"answer":"शत्रु"},
+  {"question":"जीवन","options":["मृत्यु","ऊपर","हल्का","स्नेह"],"answer":"मृत्यु"},
+  {"question":"खुला","options":["बंद","गरम","शोर","गहरा"],"answer":"बंद"},
+  {"question":"प्रकाश","options":["अँधेरा","भरा","निराश","छोटा"],"answer":"अँधेरा"},
+  {"question":"सरल","options":["जटिल","सस्ता","खुश","ऊँचा"],"answer":"जटिल"},
+  {"question":"मोटा","options":["पतला","बालक","प्रमुख","शांत"],"answer":"पतला"},
+  {"question":"मजबूत","options":["कमजोर","कठोर","अप्रिय","दिन"],"answer":"कमजोर"},
+  {"question":"शांत","options":["अशांत","नया","मीठा","तेज़"],"answer":"अशांत"},
+  {"question":"हल्का","options":["भारी","दूर","खुला","स्वतंत्र"],"answer":"भारी"},
+  {"question":"उदार","options":["कंजूस","पूर्व","अन्धकार","पीला"],"answer":"कंजूस"},
+  {"question":"आगे","options":["पीछे","खुश","मोटा","नया"],"answer":"पीछे"},
+  {"question":"ऊँचा","options":["नीचा","खुला","मीठा","तेज़"],"answer":"नीचा"},
+  {"question":"पूरा","options":["अधूरा","सस्ता","ऊपर","शांत"],"answer":"अधूरा"},
+  {"question":"सुरक्षित","options":["खतरनाक","पतला","काला","धीमा"],"answer":"खतरनाक"},
+  {"question":"सम्मान","options":["अपमान","नया","ऊँचा","स्वस्थ"],"answer":"अपमान"},
+  {"question":"खुश","options":["उदास","हल्का","सजना","तेज़"],"answer":"उदास"},
+  {"question":"अनुशासन","options":["अव्यवस्था","खुला","नीचा","नया"],"answer":"अव्यवस्था"},
+  {"question":"आगमन","options":["प्रस्थान","भरा","मीठा","ऊँचा"],"answer":"प्रस्थान"},
+  {"question":"जीत","options":["हार","नया","ऊपर","सस्ता"],"answer":"हार"},
+  {"question":"आना","options":["जाना","साफ","हल्का","प्रकाश"],"answer":"जाना"},
+  {"question":"मीठा","options":["कड़वा","प्रमुख","भरा","स्वतंत्र"],"answer":"कड़वा"},
+  {"question":"साफ","options":["गंदा","बड़ा","ऊँचा","आनंद"],"answer":"गंदा"},
+  {"question":"आसान","options":["कठिन","समृद्ध","ऊपर","मीठा"],"answer":"कठिन"},
+  {"question":"सक्रिय","options":["निष्क्रिय","नीचा","तेज़","अमीर"],"answer":"निष्क्रिय"},
+  {"question":"स्वतंत्र","options":["निर्भर","बंद","ऊँचा","खुश"],"answer":"निर्भर"},
+  {"question":"सस्ता","options":["महंगा","भरा","प्रकाश","सुंदर"],"answer":"महंगा"},
+  {"question":"स्वस्थ","options":["अस्वस्थ","बुरा","छोटा","धीमा"],"answer":"अस्वस्थ"},
+  {"question":"उदय","options":["अस्त","सस्ता","शांत","छोटा"],"answer":"अस्त"},
+  {"question":"स्वच्छ","options":["मैला","ऊँचा","तेज़","विषम"],"answer":"मैला"},
+  {"question":"सुंदर","options":["बदसूरत","खुला","ऊपर","मीठा"],"answer":"बदसूरत"},
+  {"question":"गहरा","options":["उथला","नया","बड़ा","स्वतंत्र"],"answer":"उथला"},
+  {"question":"शीघ्र","options":["धीमा","खुश","बाहरी","सस्ता"],"answer":"धीमा"},
+  {"question":"युवा","options":["वृद्ध","नीचा","गहरा","स्वतंत्र"],"answer":"वृद्ध"},
+  {"question":"ज्ञानी","options":["अज्ञानी","भरा","मीठा","ऊपर"],"answer":"अज्ञानी"},
+  {"question":"मान्य","options":["अमान्य","ताज़ा","ऊँचा","सुंदर"],"answer":"अमान्य"},
+  {"question":"उपयुक्त","options":["अनुपयुक्त","बंद","खुश","धीमा"],"answer":"अनुपयुक्त"},
+  {"question":"प्रिय","options":["अप्रिय","ऊपर","तेज़","सस्ता"],"answer":"अप्रिय"},
+  {"question":"दयालु","options":["निर्दयी","नीचा","गहरा","स्वतंत्र"],"answer":"निर्दयी"},
+  {"question":"बहादुर","options":["डरपोक","अँधेरा","मीठा","सस्ता"],"answer":"डरपोक"},
+  {"question":"जल्दी","options":["देर","गंदा","उपर","काला"],"answer":"देर"},
+  {"question":"उचित","options":["अनुचित","नीचा","मीठा","स्वतंत्र"],"answer":"अनुचित"},
+  {"question":"समान","options":["असमान","बाहर","तेज़","नया"],"answer":"असमान"},
+  {"question":"दायाँ","options":["बायाँ","खुला","सुंदर","नीचा"],"answer":"बायाँ"},
+  {"question":"गर्मी","options":["सर्दी","भरा","सुंदर","उपर"],"answer":"सर्दी"},
+  {"question":"सतर्क","options":["लापरवाह","भीतर","मीठा","ऊँचा"],"answer":"लापरवाह"},
+  {"question":"भरा","options":["खाली","तेज़","ध्यान","बड़ा"],"answer":"खाली"},
+  {"question":"नरम","options":["कठोर","नया","ऊपर","सुंदर"],"answer":"कठोर"},
+  {"question":"दूर","options":["पास","बड़ा","स्वतंत्र","मीठा"],"answer":"पास"},
+  {"question":"प्रमुख","options":["गौण","खुला","मीठा","तेज़"],"answer":"गौण"},
+  {"question":"सजीव","options":["निर्जीव","धीमा","नीचा","अमीर"],"answer":"निर्जीव"},
+  {"question":"वृद्धि","options":["कमी","सुंदर","ऊँचा","खुश"],"answer":"कमी"},
+  {"question":"हँसना","options":["रोना","बाहर","ऊपर","तेज़"],"answer":"रोना"},
+  {"question":"शोर","options":["शांति","बड़ा","नीचा","सुंदर"],"answer":"शांति"},
+  {"question":"प्राकृतिक","options":["कृत्रिम","छोटा","अंदर","मीठा"],"answer":"कृत्रिम"},
+  {"question":"नैतिक","options":["अनैतिक","खुला","नया","तेज़"],"answer":"अनैतिक"},
+  {"question":"आग","options":["पानी","ऊपर","सस्ता","मीठा"],"answer":"पानी"},
+  {"question":"आरंभ","options":["समाप्ति","स्वतंत्र","ऊँचा","सस्ता"],"answer":"समाप्ति"},
+  {"question":"निरंतर","options":["विराम","खुश","ऊपर","मीठा"],"answer":"विराम"},
+  {"question":"स्नेह","options":["द्वेष","नीचा","तेज़","बड़ा"],"answer":"द्वेष"},
+  {"question":"अनुकूल","options":["प्रतिकूल","सस्ता","ऊपर","मीठा"],"answer":"प्रतिकूल"},
+  {"question":"बुद्धिमान","options":["मूर्ख","हवा","नीचा","सुंदर"],"answer":"मूर्ख"},
+  {"question":"ताज़ा","options":["बासी","अंदर","नीचा","सस्ता"],"answer":"बासी"},
+  {"question":"बचत","options":["खर्च","ऊपर","तेज़","सादा"],"answer":"खर्च"},
+  {"question":"एकता","options":["अलगाव","सस्ता","ऊँचा","मीठा"],"answer":"अलगाव"},
+  {"question":"दोस्ती","options":["दुश्मनी","खुला","नीचा","सुंदर"],"answer":"दुश्मनी"},
+  {"question":"आरोग्य","options":["रोग","अमीर","ऊपर","मीठा"],"answer":"रोग"},
+  {"question":"सामान्य","options":["असाधारण","तेज़","नीचा","सस्ता"],"answer":"असाधारण"},
+  {"question":"अधिक","options":["कम","ऊपर","सस्ता","मीठा"],"answer":"कम"},
+  {"question":"रोटी?","options":["पानी","नया","ऊँचा","मीठा"],"answer":"पानी"},
+  {"question":"नया (दूसरा)","options":["पुराना","छोटा","नीचा","सस्ता"],"answer":"पुराना"},
+  {"question":"खुशहाल","options":["दु:खी","बाहर","तेज़","सस्ता"],"answer":"दु:खी"},
+  {"question":"भरपूर","options":["अल्प","ऊपर","मीठा","सस्ता"],"answer":"अल्प"},
+  {"question":"आवश्यक","options":["अनावश्यक","नीचा","तेज़","सस्ता"],"answer":"अनावश्यक"},
+  {"question":"साहस","options":["भय","ऊपर","मीठा","सस्ता"],"answer":"भय"},
+  {"question":"उत्साह","options":["निराशा","छोटा","नीचा","सस्ता"],"answer":"निराशा"},
+  {"question":"उपयुक्त (दूसरा)","options":["अनोचित","खींच","ऊपर","मीठा"],"answer":"अनोचित"},
+  {
+      "question": "अपराधी",
+      "options": [
+        "निरपराधी",
+        "मानना",
+        "पतला",
+        "गुरु"
+      ],
+      "answer": "निरपराधी"
+    },
+    {
+      "question": "कृतज्ञ",
+      "options": [
+        "कृतघ्न",
+        "व्यापार",
+        "जमीन",
+        "शीघ्र"
+      ],
+      "answer": "कृतघ्न"
+    },
+    {
+      "question": "संतुलन",
+      "options": [
+        "असंतुलन",
+        "मान",
+        "बिछड़ना",
+        "अस्पर्श"
+      ],
+      "answer": "असंतुलन"
+    },
+    {
+      "question": "आकाश",
+      "options": [
+        "नापसंद",
+        "समाधान",
+        "मंद",
+        "पाताल"
+      ],
+      "answer": "पाताल"
+    },
+    {
+      "question": "प्रसन्न",
+      "options": [
+        "मिलना",
+        "अप्रसन्न",
+        "दुर्जन",
+        "पंडित"
+      ],
+      "answer": "अप्रसन्न"
+    },
+    {
+      "question": "मानना",
+      "options": [
+        "परदेशी",
+        "पसंद",
+        "इंकार करना",
+        "निष्कपट"
+      ],
+      "answer": "इंकार करना"
+    },
+    {
+      "question": "पसंद",
+      "options": [
+        "पाप",
+        "नापसंद",
+        "पंडित",
+        "अप्रसिद्ध"
+      ],
+      "answer": "नापसंद"
+    },
+    {
+      "question": "अच्छा",
+      "options": [
+        "बुरा",
+        "आरम्भ",
+        "इज्जत",
+        "धूप"
+      ],
+      "answer": "बुरा"
+    },
+    {
+      "question": "सुख",
+      "options": [
+        "अविश्वास",
+        "बेइज्जत",
+        "दुश्मन",
+        "दुख"
+      ],
+      "answer": "दुख"
+    },
+    {
+      "question": "लंबा",
+      "options": [
+        "बेमिसाल",
+        "दीन",
+        "छोटा",
+        "सच"
+      ],
+      "answer": "छोटा"
+    },
+    {
+      "question": "धूप",
+      "options": [
+        "निष्कपट",
+        "छाँव",
+        "विदेश",
+        "गुरु"
+      ],
+      "answer": "छाँव"
+    },
+    {
+      "question": "पाना",
+      "options": [
+        "निरपराधी",
+        "पवित्र",
+        "खोना",
+        "नई"
+      ],
+      "answer": "खोना"
+    },
+    {
+      "question": "स्वदेशी",
+      "options": [
+        "परदेशी",
+        "घटना",
+        "विजय",
+        "मिसाल"
+      ],
+      "answer": "परदेशी"
+    },
+    {
+      "question": "शीघ्र",
+      "options": [
+        "संतुलन",
+        "धीमा",
+        "वीरता",
+        "याद करना"
+      ],
+      "answer": "धीमा"
+    },
+    {
+      "question": "उचित",
+      "options": [
+        "असुविधा",
+        "अबला",
+        "अनुचित",
+        "पाप"
+      ],
+      "answer": "अनुचित"
+    },
+    {
+      "question": "पवित्र",
+      "options": [
+        "कृतज्ञ",
+        "ज्ञान",
+        "अपवित्र",
+        "इंकार करना"
+      ],
+      "answer": "अपवित्र"
+    },
+    {
+      "question": "स्वदेश",
+      "options": [
+        "स्वदेशी",
+        "मजबूत",
+        "विदेश",
+        "सुलभ"
+      ],
+      "answer": "विदेश"
+    },
+    {
+      "question": "सज्जन",
+      "options": [
+        "दुर्जन",
+        "स्थिर",
+        "मूर्ख",
+        "जीतना"
+      ],
+      "answer": "दुर्जन"
+    },
+    {
+      "question": "इज्जत",
+      "options": [
+        "बेइज्जत",
+        "दिन",
+        "निराशा",
+        "जवाब"
+      ],
+      "answer": "बेइज्जत"
+    },
+    {
+      "question": "गरीब",
+      "options": [
+        "जीतना",
+        "अमीर",
+        "बढ़ना",
+        "सुंदर"
+      ],
+      "answer": "अमीर"
+    },
+    {
+      "question": "स्वामी",
+      "options": [
+        "ज्ञान",
+        "दास",
+        "सुविधा",
+        "त्याग"
+      ],
+      "answer": "दास"
+    },
+    {
+      "question": "निराशा",
+      "options": [
+        "आशा",
+        "मूर्ख",
+        "बेइज्जत",
+        "मानना"
+      ],
+      "answer": "आशा"
+    },
+    {
+      "question": "धार्मिक",
+      "options": [
+        "अधार्मिक",
+        "अप्रसन्न",
+        "खोना",
+        "पुण्य"
+      ],
+      "answer": "अधार्मिक"
+    },
+    {
+      "question": "ईमानदार",
+      "options": [
+        "लंबा",
+        "कुरूप",
+        "बेईमान",
+        "कृतज्ञ"
+      ],
+      "answer": "बेईमान"
+    },
+    {
+      "question": "विश्वास",
+      "options": [
+        "महात्मा",
+        "झूठ",
+        "सुख",
+        "अविश्वास"
+      ],
+      "answer": "अविश्वास"
+    },
+    {
+      "question": "प्यार",
+      "options": [
+        "अप्रसन्न",
+        "बिछड़ना",
+        "द्वेष",
+        "कुरूप"
+      ],
+      "answer": "द्वेष"
+    },
+    {
+      "question": "बसना",
+      "options": [
+        "उजड़ना",
+        "घटना",
+        "दुर्लभ",
+        "भाग्य"
+      ],
+      "answer": "उजड़ना"
+    },
+    {
+      "question": "साक्षर",
+      "options": [
+        "उत्साह",
+        "अनुचित",
+        "निरक्षर",
+        "बाएँ"
+      ],
+      "answer": "निरक्षर"
+    },
+    {
+      "question": "दुर्लभ",
+      "options": [
+        "सुलभ",
+        "मजबूत",
+        "झूठ",
+        "पुरानी"
+      ],
+      "answer": "सुलभ"
+    },
+    {
+      "question": "भाग्य",
+      "options": [
+        "अभाग्य",
+        "बढ़ना",
+        "कपट",
+        "बेइज्जत"
+      ],
+      "answer": "अभाग्य"
+    },
+    {
+      "question": "पंडित",
+      "options": [
+        "अबला",
+        "स्वदेशी",
+        "मूर्ख",
+        "अशास्त्रीय"
+      ],
+      "answer": "मूर्ख"
+    },
+    {
+      "question": "सवाल",
+      "options": [
+        "जवाब",
+        "स्वदेशी",
+        "नरक",
+        "सबला"
+      ],
+      "answer": "जवाब"
+    },
+    {
+      "question": "बढ़िया",
+      "options": [
+        "आशा",
+        "नरक",
+        "कपट",
+        "घटिया"
+      ],
+      "answer": "घटिया"
+    },
+    {
+      "question": "शास्त्रीय",
+      "options": [
+        "विजय",
+        "स्वार्थ",
+        "अशास्त्रीय",
+        "अप्रसन्न"
+      ],
+      "answer": "अशास्त्रीय"
+    },
+    {
+      "question": "यश",
+      "options": [
+        "ज्ञान",
+        "सजीव",
+        "अपयश",
+        "व्यापार"
+      ],
+      "answer": "अपयश"
+    },
+    {
+      "question": "सुंदर",
+      "options": [
+        "दिन",
+        "कुरूप",
+        "जीना",
+        "प्राचीन"
+      ],
+      "answer": "कुरूप"
+    },
+    {
+      "question": "वीरता",
+      "options": [
+        "मूर्ख",
+        "कृतज्ञ",
+        "कायरता",
+        "बेमिसाल"
+      ],
+      "answer": "कायरता"
+    },
+    {
+      "question": "प्राचीन",
+      "options": [
+        "नवीन",
+        "कुरूप",
+        "तेज़",
+        "स्वदेशी"
+      ],
+      "answer": "नवीन"
+    },
+    {
+      "question": "तेज़",
+      "options": [
+        "मंद",
+        "अमीर",
+        "विदेश",
+        "अधार्मिक"
+      ],
+      "answer": "मंद"
+    },
+    {
+      "question": "आसमान",
+      "options": [
+        "मिलना",
+        "जमीन",
+        "सुंदर",
+        "स्वार्थ"
+      ],
+      "answer": "जमीन"
+    },
+    {
+      "question": "मित्र",
+      "options": [
+        "दुश्मन",
+        "हारना",
+        "मान",
+        "दाएँ"
+      ],
+      "answer": "दुश्मन"
+    },
+    {
+      "question": "दिन",
+      "options": [
+        "सज्जन",
+        "रात",
+        "सबला",
+        "मिलना"
+      ],
+      "answer": "रात"
+    },
+    {
+      "question": "मजबूत",
+      "options": [
+        "असफलता",
+        "बुरा",
+        "कमज़ोर",
+        "अप्रसिद्ध"
+      ],
+      "answer": "कमज़ोर"
+    },
+    {
+      "question": "स्थिर",
+      "options": [
+        "विश्वास",
+        "धीमा",
+        "मजबूत",
+        "अस्थिर"
+      ],
+      "answer": "अस्थिर"
+    },
+    {
+      "question": "भूलना",
+      "options": [
+        "सुंदर",
+        "उत्साह",
+        "बढ़िया",
+        "याद करना"
+      ],
+      "answer": "याद करना"
+    },
+    {
+      "question": "विजय",
+      "options": [
+        "असुविधा",
+        "पराजय",
+        "इंकार करना",
+        "शक्ति"
+      ],
+      "answer": "पराजय"
+    },
+    {
+      "question": "त्याग",
+      "options": [
+        "स्वार्थ",
+        "शक्ति",
+        "बढ़िया",
+        "कपट"
+      ],
+      "answer": "स्वार्थ"
+    },
+    {
+      "question": "महात्मा",
+      "options": [
+        "पाताल",
+        "घटना",
+        "दुरात्मा",
+        "नई"
+      ],
+      "answer": "दुरात्मा"
+    },
+    {
+      "question": "ऊँचाई",
+      "options": [
+        "सुविधा",
+        "गहराई",
+        "अस्थिर",
+        "महात्मा"
+      ],
+      "answer": "गहराई"
+    },
+    {
+      "question": "संभव",
+      "options": [
+        "ऊँचाई",
+        "उत्साह",
+        "विजय",
+        "असंभव"
+      ],
+      "answer": "असंभव"
+    },
+    {
+      "question": "पाप",
+      "options": [
+        "अज्ञान",
+        "असुविधा",
+        "पुण्य",
+        "शिष्य"
+      ],
+      "answer": "पुण्य"
+    },
+    {
+      "question": "उन्नति",
+      "options": [
+        "सवाल",
+        "ईमानदार",
+        "अज्ञान",
+        "अवनति"
+      ],
+      "answer": "अवनति"
+    },
+    {
+      "question": "उतरना",
+      "options": [
+        "कृतघ्न",
+        "निरपराधी",
+        "चढ़ना",
+        "शास्त्रीय"
+      ],
+      "answer": "चढ़ना"
+    },
+    {
+      "question": "साकार",
+      "options": [
+        "विदेश",
+        "निराकार",
+        "निर्जीव",
+        "स्वार्थ"
+      ],
+      "answer": "निराकार"
+    },
+    {
+      "question": "सजीव",
+      "options": [
+        "पास",
+        "यश",
+        "निर्जीव",
+        "धीमा"
+      ],
+      "answer": "निर्जीव"
+    },
+    {
+      "question": "मोटा",
+      "options": [
+        "पाताल",
+        "छाँव",
+        "पतला",
+        "धीरज"
+      ],
+      "answer": "पतला"
+    },
+    {
+      "question": "दूर",
+      "options": [
+        "संतुलन",
+        "उदारता",
+        "पास",
+        "विदेश"
+      ],
+      "answer": "पास"
+    },
+    {
+      "question": "अबला",
+      "options": [
+        "बाएँ",
+        "जीतना",
+        "सबला",
+        "कठिन"
+      ],
+      "answer": "सबला"
+    },
+    {
+      "question": "कपट",
+      "options": [
+        "बेमिसाल",
+        "शीघ्र",
+        "सरल",
+        "निष्कपट"
+      ],
+      "answer": "निष्कपट"
+    },
+    {
+      "question": "सुविधा",
+      "options": [
+        "शांति",
+        "असुविधा",
+        "मजबूत",
+        "दास"
+      ],
+      "answer": "असुविधा"
+    },
+    {
+      "question": "जीतना",
+      "options": [
+        "ज्ञान",
+        "दुश्मन",
+        "हारना",
+        "महात्मा"
+      ],
+      "answer": "हारना"
+    },
+    {
+      "question": "गुरु",
+      "options": [
+        "शिष्य",
+        "अपयश",
+        "सजीव",
+        "उतरना"
+      ],
+      "answer": "शिष्य"
+    },
+    {
+      "question": "मिसाल",
+      "options": [
+        "बेमिसाल",
+        "पाप",
+        "विदेश",
+        "प्राचीन"
+      ],
+      "answer": "बेमिसाल"
+    },
+    {
+      "question": "योग्य",
+      "options": [
+        "प्राचीन",
+        "अयोग्य",
+        "पराजय",
+        "बिछड़ना"
+      ],
+      "answer": "अयोग्य"
+    },
+    {
+      "question": "सफलता",
+      "options": [
+        "असफलता",
+        "परदेशी",
+        "दूर",
+        "बेमिसाल"
+      ],
+      "answer": "असफलता"
+    },
+    {
+      "question": "पुरानी",
+      "options": [
+        "इंकार करना",
+        "नई",
+        "पास",
+        "दुर्लभ"
+      ],
+      "answer": "नई"
+    },
+    {
+      "question": "मिलना",
+      "options": [
+        "बिछड़ना",
+        "रात",
+        "पसंद",
+        "मानना"
+      ],
+      "answer": "बिछड़ना"
+    },
+    {
+      "question": "दाएँ",
+      "options": [
+        "अशास्त्रीय",
+        "बाएँ",
+        "पाताल",
+        "पराजय"
+      ],
+      "answer": "बाएँ"
+    },
+    {
+      "question": "प्रसिद्ध",
+      "options": [
+        "नई",
+        "अप्रसिद्ध",
+        "असंभव",
+        "अभाग्य"
+      ],
+      "answer": "अप्रसिद्ध"
+    },
+    {
+      "question": "स्वर्ग",
+      "options": [
+        "आसमान",
+        "असंभव",
+        "नरक",
+        "मोटा"
+      ],
+      "answer": "नरक"
+    },
+    {
+      "question": "आरम्भ",
+      "options": [
+        "पाताल",
+        "हारना",
+        "अंत",
+        "अभाग्य"
+      ],
+      "answer": "अंत"
+    },
+    {
+      "question": "ज्ञान",
+      "options": [
+        "झूठ",
+        "भूलना",
+        "अज्ञान",
+        "पाप"
+      ],
+      "answer": "अज्ञान"
+    },
+    {
+      "question": "जीना",
+      "options": [
+        "इज्जत",
+        "मरना",
+        "जवाब",
+        "अप्रसन्न"
+      ],
+      "answer": "मरना"
+    },
+    {
+      "question": "बढ़ना",
+      "options": [
+        "प्राचीन",
+        "उदारता",
+        "घटना",
+        "पास"
+      ],
+      "answer": "घटना"
+    },
+    {
+      "question": "मान",
+      "options": [
+        "असंभव",
+        "असंतुलन",
+        "बढ़ना",
+        "अपमान"
+      ],
+      "answer": "अपमान"
+    },
+    {
+      "question": "सच",
+      "options": [
+        "मिसाल",
+        "नापसंद",
+        "संतुलन",
+        "झूठ"
+      ],
+      "answer": "झूठ"
+    },
+    {
+      "question": "सरल",
+      "options": [
+        "सबला",
+        "कृतघ्न",
+        "प्रसन्न",
+        "कठिन"
+      ],
+      "answer": "कठिन"
+    }
+  ];
+
+/* ------------------------
+   UI refs & defaults
+   ------------------------ */
+const choiceSelect = document.getElementById('choiceSelect');
+const countSelect = document.getElementById('countSelect');
+const timeSelect = document.getElementById('timeSelect');
+const choiceCustom = document.getElementById('choiceCustom');
+const countCustom = document.getElementById('countCustom');
+const timeCustom = document.getElementById('timeCustom');
+const timerEnable = document.getElementById('timerEnable');
+const startBtn = document.getElementById('startBtn');
+const quizDiv = document.getElementById('quiz');
+const progressBar = document.getElementById('progress');
+const counterEl = document.getElementById('counter');
+const timerEl = document.getElementById('timer');
+
+const SETTINGS_KEY = 'samas_custom_settings_with_timer_v1';
+const defaults = { choices: 4, count: Math.min(24, questions.length), time: 180, timerEnabled: true };
+
+/* fill select options */
+[3,4,5,6,'Custom'].forEach(v => {
+  const o = document.createElement('option'); o.value = v; o.textContent = v; choiceSelect.appendChild(o);
+});
+[10,24,50,75,'All','Custom'].forEach(v => {
+  const o = document.createElement('option'); o.value = v; o.textContent = v; countSelect.appendChild(o);
+});
+[0,60,120,180,300,600,'Custom'].forEach(v => {
+  const o = document.createElement('option'); o.value = v; o.textContent = v; timeSelect.appendChild(o);
+});
+
+/* load saved settings */
+let saved = localStorage.getItem(SETTINGS_KEY);
+let settings = saved ? JSON.parse(saved) : defaults;
+
+/* set UI from settings */
+function applySettingsToUI(){
+  if ([3,4,5,6].includes(settings.choices)) {
+    choiceSelect.value = settings.choices; choiceCustom.style.display = 'none';
+  } else { choiceSelect.value = 'Custom'; choiceCustom.style.display = ''; choiceCustom.value = settings.choices; }
+  if ([10,24,50,75].includes(settings.count)) {
+    countSelect.value = settings.count; countCustom.style.display = 'none';
+  } else if (settings.count === questions.length) {
+    countSelect.value = 'All'; countCustom.style.display = 'none';
+  } else { countSelect.value = 'Custom'; countCustom.style.display = ''; countCustom.value = settings.count; }
+  if ([0,60,120,180,300,600].includes(settings.time)) {
+    timeSelect.value = settings.time; timeCustom.style.display = 'none';
+  } else { timeSelect.value = 'Custom'; timeCustom.style.display = ''; timeCustom.value = settings.time; }
+  timerEnable.checked = !!settings.timerEnabled;
+}
+applySettingsToUI();
+
+/* events for selectors */
+let selectsDirty = false;
+choiceSelect.addEventListener('change', () => { selectsDirty = true; if (choiceSelect.value === 'Custom') choiceCustom.style.display=''; else choiceCustom.style.display='none'; });
+countSelect.addEventListener('change', () => { selectsDirty = true; if (countSelect.value === 'Custom') countCustom.style.display=''; else countCustom.style.display='none'; });
+timeSelect.addEventListener('change', () => { selectsDirty = true; if (timeSelect.value === 'Custom') timeCustom.style.display=''; else timeCustom.style.display='none'; });
+timerEnable.addEventListener('change', () => { selectsDirty = true; });
+
+/* helpers */
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
+function sampleOptions(baseOptions, correct, n){ const pool=baseOptions.filter(x=>x!==correct); shuffle(pool); const chosen=pool.slice(0,n-1); chosen.push(correct); return shuffle(chosen); }
+
+/* quiz state */
+let currentSet=[], idx=0, userAnswers=[], timerInterval=null;
+let quizEnded = false; // prevent race conditions
+
+/* read UI values */
+function readUIValues(){
+  let choicesVal = (choiceSelect.value==='Custom') ? parseInt(choiceCustom.value,10)||defaults.choices : parseInt(choiceSelect.value,10);
+  let countVal;
+  if (countSelect.value==='Custom') countVal=parseInt(countCustom.value,10)||Math.min(24,questions.length);
+  else if (countSelect.value==='All') countVal=questions.length;
+  else countVal=parseInt(countSelect.value,10);
+  let timeVal=(timeSelect.value==='Custom')?parseInt(timeCustom.value,10)||0:parseInt(timeSelect.value,10);
+  return { choices:Math.max(2,choicesVal), count:Math.min(Math.max(1,countVal),questions.length), time:Math.max(0,timeVal) };
+}
+
+/* timer */
+
+function startTimer(sec){ 
+  if (timerInterval) clearInterval(timerInterval); 
+  if (!sec || sec <= 0){ 
+    timerEl.textContent='--:--'; 
+    return;
+  } 
+  let remaining = sec; 
+  timerEl.textContent = formatTime(remaining); 
+
+  timerInterval = setInterval(() => { 
+    remaining--; 
+    if (remaining <= 0){ 
+      clearInterval(timerInterval); 
+      timerEl.textContent = '00:00'; 
+      // ⬇️ Force quiz to stop and show results immediately
+      quizEnded = true; // mark quiz ended before showing results
+      showResults();
+    } else { 
+      timerEl.textContent = formatTime(remaining); 
+    } 
+  }, 1000); 
+}
+function formatTime(s){ const m=Math.floor(s/60); const r=s%60; return `${String(m).padStart(2,'0')}:${String(r).padStart(2,'0')}`; }
+
+/* start quiz */
+function startQuiz(){
+  const vals=readUIValues(); settings={choices:vals.choices,count:vals.count,time:vals.time,timerEnabled:!!timerEnable.checked}; localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings)); selectsDirty=false;
+  const pool=JSON.parse(JSON.stringify(questions)); shuffle(pool);
+  currentSet=pool.slice(0,Math.min(settings.count,pool.length)).map(q=>({question:q.question, options:sampleOptions(q.options,q.answer,Math.min(settings.choices,q.options.length)), answer:q.answer}));
+  idx=0; userAnswers=new Array(currentSet.length).fill(null);
+  quizEnded = false; // reset flag
+  if(settings.timerEnabled&&settings.time>0) startTimer(settings.time); else startTimer(0);
+  renderQuestion();
+}
+function renderQuestion(){ if(!currentSet.length){ quizDiv.innerHTML='<div style="padding:18px;color:#bfe">Press Start to begin</div>'; return;} const q=currentSet[idx]; quizDiv.innerHTML=''; const qText=document.createElement('div'); qText.className='question'; qText.textContent=`${idx+1}. ${q.question}`; quizDiv.appendChild(qText); const optsWrap=document.createElement('div'); optsWrap.className='options'; q.options.forEach(opt=>{ const btn=document.createElement('button'); btn.className='answer-btn'; btn.type='button'; btn.dataset.value=opt; btn.textContent=opt; btn.addEventListener('click',()=>handleAnswer(q,opt,btn)); optsWrap.appendChild(btn); }); quizDiv.appendChild(optsWrap); updateProgress();}
+function handleAnswer(qObj,chosen,chosenBtn){ const buttons=Array.from(quizDiv.querySelectorAll('.answer-btn')); buttons.forEach(b=>b.disabled=true); buttons.forEach(b=>{ if(b.dataset.value===qObj.answer) b.classList.add('correct'); if(b.dataset.value===chosen&&chosen!==qObj.answer) b.classList.add('incorrect'); }); userAnswers[idx]=chosen; setTimeout(()=>{ if(quizEnded) return; if(idx<currentSet.length-1){ idx++; renderQuestion(); } else showResults(); },450);}
+function updateProgress(){ const pct=Math.round(((idx)/(Math.max(1,currentSet.length-1)))*100); progressBar.style.width=`${pct}%`; counterEl.textContent=`Question ${idx+1} of ${currentSet.length}`;}
+
+function showResults(){ 
+  quizEnded = true;
+  if(timerInterval) clearInterval(timerInterval); 
+  quizDiv.innerHTML=''; 
+  const out=document.createElement('div'); 
+  out.style.padding='12px'; 
+  out.innerHTML='<h3 style="color:#fff;margin-top:0">Results</h3>'; 
+  let correct=0; 
+  currentSet.forEach((q,i)=>{ 
+    const ua=userAnswers[i]; 
+    const ok=ua===q.answer; 
+    if(ok) correct++; 
+    const row=document.createElement('div'); 
+    row.style.marginBottom='10px'; 
+    row.innerHTML=`<strong style="color:#fff">${i+1}. ${q.question}</strong><div style="margin-top:6px;color:${ok?'#ffd700':'#ff9aa2'}">Your: ${ua?ua:'—'}</div>${ok?'':`<div style="color:#ffd700">Ans: ${q.answer}</div>`}`; 
+    out.appendChild(row); 
+  }); 
+  out.innerHTML+=`<div style="margin-top:12px;color:#dff"><strong>Score: ${correct} / ${currentSet.length}</strong></div>`; 
+  
+  // ⬇️ Add Retake button
+  const retakeBtn = document.createElement('button');
+  retakeBtn.textContent = "Retake Quiz";
+  retakeBtn.style.marginTop = "16px";
+  retakeBtn.className = "small-btn";
+  retakeBtn.addEventListener("click", startQuiz);
+  out.appendChild(retakeBtn);
+
+  quizDiv.appendChild(out); 
+  progressBar.style.width='100%'; 
+  counterEl.textContent=`Done — Score ${correct}/${currentSet.length}`; 
+}
+
+/* auto-start */
+window.addEventListener('load',()=>{ applySettingsToUI(); setTimeout(()=>{ if(!selectsDirty){ startQuiz(); } },120); });
+startBtn.addEventListener('click',startQuiz);
+
+/* ------------------------
+   Theme System
+   ------------------------ */
+const THEMES = {
+  "Neon Night": { "--bg1":"#291c6e","--bg2":"#00167d","--panel":"#12132a","--accent":"#2debb0" },
+  "Sunset Glow": { "--bg1":"#ff7e5f","--bg2":"#feb47b","--panel":"#2e1d12","--accent":"#ffd166" },
+  "Ocean Blue": { "--bg1":"#006994","--bg2":"#003459","--panel":"#012a36","--accent":"#00e5ff" },
+  "Forest Green": { "--bg1":"#1b4332","--bg2":"#081c15","--panel":"#0f5132","--accent":"#95d5b2" },
+  "Royal Purple": { "--bg1":"#3c096c","--bg2":"#240046","--panel":"#10002b","--accent":"#9d4edd" },
+  "Golden Desert": { "--bg1":"#d97706","--bg2":"#92400e","--panel":"#78350f","--accent":"#fcd34d" },
+  "Candy Pink": { "--bg1":"#ff80ab","--bg2":"#ec407a","--panel":"#880e4f","--accent":"#f8bbd0" },
+  "Sky Cyan": { "--bg1":"#00c6ff","--bg2":"#0072ff","--panel":"#012a4a","--accent":"#90e0ef" },
+  "Elegant Gray": { "--bg1":"#2c2c2c","--bg2":"#1a1a1a","--panel":"#111111","--accent":"#bfbfbf" }
+};
+
+const themeSelect = document.getElementById('themeSelect');
+const THEME_KEY = "quiz_theme_choice";
+
+// populate theme dropdown
+Object.keys(THEMES).forEach(name => {
+  const opt = document.createElement("option");
+  opt.value = name;
+  opt.textContent = name;
+  themeSelect.appendChild(opt);
+});
+
+// apply theme (writes CSS variables)
+function applyTheme(name){
+  const theme = THEMES[name] || THEMES["Neon Night"];
+  Object.keys(theme).forEach(key => {
+    document.documentElement.style.setProperty(key, theme[key]);
+  });
+
+    // Update body background gradient which uses --bg1/--bg2
+  document.body.style.background = `radial-gradient(circle at 10% 10%, #06104a 0%, var(--bg1) 25%, var(--bg2) 70%)`;
+
+  localStorage.setItem(THEME_KEY, name);
+}
+
+// load saved theme
+let savedTheme = localStorage.getItem(THEME_KEY) || "Neon Night";
+if (!THEMES[savedTheme]) savedTheme = "Neon Night";
+themeSelect.value = savedTheme;
+applyTheme(savedTheme);
+
+// on change
+themeSelect.addEventListener("change", () => {
+  applyTheme(themeSelect.value);
+});
+</script>
+</body>
+</html>
